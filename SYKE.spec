@@ -9,10 +9,12 @@ ROOT = Path(SPECPATH)
 datas = [
     (str(ROOT / "core" / "face_model.obj"), "core"),
     (str(ROOT / "core" / "prompt.txt"), "core"),
-    (str(ROOT / "config" / "jarvis.ico"), "config"),
+    (str(ROOT / "config" / "syke.ico"), "config"),
+    (str(ROOT / "config" / "syke.png"), "config"),
+    (str(ROOT / "config" / "syke_spider_swing.png"), "config"),
     (str(ROOT / "dashboard" / "static"), "dashboard/static"),
+    (str(ROOT / "browser_extension"), "browser_extension"),
 ]
-
 for folder in ("actions", "plugins"):
     datas.extend(
         (str(path), folder)
@@ -44,12 +46,12 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="JARVIS",
+    name="SYKE",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    icon=str(ROOT / "config" / "jarvis.ico"),
+    icon=str(ROOT / "config" / "syke.ico"),
 )

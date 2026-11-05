@@ -339,8 +339,7 @@ def send_message(
             to=receiver, platform=platform,
         )
 
-    preview = message_text[:50] + ("…" if len(message_text) > 50 else "")
-    print(f"[SendMessage] 📨 {platform} → {receiver}: {preview}")
+    print(f"[SendMessage] 📨 {platform} → {receiver}")
     if player:
         player.write_log(f"[msg] {platform} → {receiver}")   # the message itself IS the news
 

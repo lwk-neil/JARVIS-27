@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from core import appidentity, outcome
+from core.browser_bridge import browser_bridge
 
 # Importing playwright cost 198 ms at every launch, paid by action discovery
 # whether or not a browser was ever opened. It is the second-largest import in
@@ -860,13 +861,13 @@ class _BrowserSession:
         page = await self._get_page()
         try:
             text = await page.inner_text("body")
-            return text[:4_000]
+            return outcome.untrusted("web", text[:4_000])
         except Exception as e:
             return f"Could not get page text: {e}"
 
     async def get_url(self) -> str:
         page = await self._get_page()
-        return page.url
+        return outcome.untrusted("web", page.url)
 
     async def fill_form(self, fields: dict) -> str:
         page    = await self._get_page()
@@ -874,12 +875,31 @@ class _BrowserSession:
         for selector, value in fields.items():
             try:
                 el = page.locator(selector).first
-                await el.clear()
-                await el.type(str(value), delay=40)
+                tag = await el.evaluate("(element) => element.tagName.toLowerCase()")
+                input_type = await el.get_attribute("type") or ""
+                if tag == "select":
+                    await el.select_option(label=str(value))
+                elif input_type in {"checkbox", "radio"}:
+                    checked = value is True or (
+                        isinstance(value, str)
+                        and value.strip().lower() in {"true", "yes", "1", "checked"}
+                    )
+                    if checked:
+                        await el.check()
+                    else:
+                        await el.uncheck()
+                else:
+                    await el.fill(str(value))
                 results.append(f"✓ {selector}")
             except Exception as e:
                 results.append(f"✗ {selector}: {e}")
-        return "Form filled: " + ", ".join(results)
+        if not results:
+            return "No form fields were supplied."
+        failures = sum(result.startswith("✗") for result in results)
+        return (
+            f"Form fields filled={len(results) - failures} failed={failures}: "
+            + "; ".join(results)
+        )
 
     async def smart_click(self, description: str) -> str:
         page = await self._get_page()
@@ -1078,6 +1098,62 @@ def browser_control(
     browser = params.get("browser", "").lower().strip() or None
     result  = "Unknown action."
 
+    if action == "status":
+        status = browser_bridge.status()
+        if not status["connected"]:
+            return "No Syke browser tab is currently paired."
+        page = " — ".join(
+            value for value in (status["title"], status["url"]) if value
+        )
+        return (
+            f"Paired browser tab: {page or 'active website'}. "
+            f"Browser actions: {status['queued']} queued, "
+            f"{status['running']} already running."
+        )
+
+    if action == "cancel":
+        cancelled = browser_bridge.cancel_queued()
+        status = browser_bridge.status()
+        running_note = (
+            f" {status['running']} action(s) already started cannot be interrupted safely."
+            if status["running"] else ""
+        )
+        return (
+            f"Cancelled {cancelled} queued browser action(s).{running_note}"
+            if cancelled or status["running"]
+            else "There are no queued browser actions to cancel."
+        )
+
+    extension_actions = {
+        "click", "fill_form", "get_text", "get_url", "press", "scroll",
+        "smart_click", "smart_type", "type",
+    }
+    if browser == "current":
+        if action not in extension_actions:
+            return (
+                "The paired current tab supports click, type, form filling, "
+                "scrolling, key presses, and page reading."
+            )
+        result = browser_bridge.submit(action, params)
+        if result is None:
+            return (
+                "No current tab is paired. Click the Syke Current Tab "
+                "extension on the website, then retry."
+            )
+        if action in {"get_text", "get_url"}:
+            result = outcome.untrusted("web", result)
+        elif action in {"click", "press"}:
+            result = outcome.unverified(
+                "browser_control",
+                "the page interaction was dispatched, but its effect was "
+                "not verified; inspect the paired tab",
+                action=action,
+                page=browser_bridge.page_label(),
+                result=result,
+            )
+        _log(player, result)
+        return result
+
     if action == "switch":
         target = browser or params.get("target", "").lower().strip()
         result = _registry.switch(target) if target else "Please specify a browser."
@@ -1099,6 +1175,27 @@ def browser_control(
         result = _registry.close_one(target) if target else "No browser specified."
         _log(player, result)
         return result
+
+    chromium_aliases = {
+        None, "chrome", "edge", "msedge", "google chrome",
+        "microsoft edge",
+    }
+    if action in extension_actions and browser in chromium_aliases:
+        result = browser_bridge.submit(action, params)
+        if result is not None:
+            if action in {"get_text", "get_url"}:
+                result = outcome.untrusted("web", result)
+            elif action in {"click", "press"}:
+                result = outcome.unverified(
+                    "browser_control",
+                    "the page interaction was dispatched, but its effect was "
+                    "not verified; inspect the paired tab",
+                    action=action,
+                    page=browser_bridge.page_label(),
+                    result=result,
+                )
+            _log(player, result)
+            return result
 
     # ── Navigation is ALWAYS native ──────────────────────────────────────────
     # go_to / search / new_tab open the site in the user's own browser —
@@ -1198,18 +1295,20 @@ def browser_control(
 
 
 def _log(player, text: str):
-    short = str(text)[:80]
-    print(f"[Browser] {short}")
-    if player:
-        print(f"[Browser] {short[:80]}")          # terminal, not the HUD
+    print("[Browser] Tool operation returned.")
 
 
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "browser_control",
     "description": (
-        "Controls the web browser: open an address, search, click, type, "
-        "scroll, read the page, manage tabs, go back and forward. "
+        "Checks or cancels pending browser actions and controls websites in "
+        "the explicitly paired active Chrome/Edge tab, "
+        "or in a Syke-managed browser window when no tab is paired: open "
+        "addresses, click, type, fill forms, read pages, and manage tabs. "
+        "Click the Syke Current Tab extension on the website first to let "
+        "Syke access that tab. Carry out browser actions when the user "
+        "explicitly requests them. "
         "THIS TOOL OPENS THE BROWSER ITSELF. Never call open_app for the "
         "browser first - doing both launches it twice, the second copy on a "
         "different profile with none of the user's sign-ins. 'Open Chrome and "
@@ -1230,11 +1329,11 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
+                "description": "status | cancel | go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
             },
             "browser": {
                 "type": "STRING",
-                "description": "Target browser: chrome | edge | firefox | opera | operagx | brave | vivaldi | safari. Omit to use the currently active browser."
+                "description": "Use current for the explicitly paired current Chrome/Edge tab; otherwise target chrome | edge | firefox | opera | operagx | brave | vivaldi | safari. Omit to use the active Syke browser."
             },
             "url": {
                 "type": "STRING",
@@ -1283,6 +1382,13 @@ TOOL = {
             "clear_first": {
                 "type": "BOOLEAN",
                 "description": "Clear field before typing (default: true)"
+            },
+            "fields": {
+                "type": "OBJECT",
+                "description": (
+                    "For fill_form: map CSS selectors to field values. "
+                    "Supports text inputs, selects, checkboxes and radio buttons."
+                )
             }
         },
         "required": [

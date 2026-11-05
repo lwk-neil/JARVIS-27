@@ -1,5 +1,6 @@
 import json
 import sys
+import uuid
 from pathlib import Path
 
 def get_base_dir() -> Path:
@@ -17,7 +18,7 @@ def ensure_config_dir() -> None:
 def config_exists() -> bool:
     return CONFIG_FILE.exists()
 
-def save_api_keys(gemini_api_key: str) -> None:
+def save_api_keys(gemini_api_key: str, os_system: str | None = None) -> None:
     ensure_config_dir()
 
     data: dict = {}
@@ -28,6 +29,8 @@ def save_api_keys(gemini_api_key: str) -> None:
             data = {}
 
     data["gemini_api_key"] = gemini_api_key.strip()
+    if os_system is not None:
+        data["os_system"] = os_system
 
     CONFIG_FILE.write_text(
         json.dumps(data, indent=2),
@@ -130,33 +133,36 @@ def save_push_to_talk_enabled(enabled: bool) -> None:
     _save_flag("push_to_talk_enabled", enabled)
 
 
-HUD_STYLES = ("face", "core")
+HUD_STYLES = (
+    "dna", "pulse", "matrix", "prism", "atom", "solar", "vortex",
+    "quantum", "singularity", "halo", "lattice", "face",
+)
 
 
 def get_hud_style() -> str:
-    """Which centrepiece the HUD draws: the animated head, or the reactor core.
-
-    Taste, not capability — both render in the same software painter and cost
-    about the same. The bubbly reactor is the default; anyone who prefers the
-    animated head can switch in the controls drawer, and the choice survives a
-    restart.
-    """
-    v = str(load_api_keys().get("hud_style", "core")).strip().lower()
-    return v if v in HUD_STYLES else "core"
+    """Return the saved HUD centrepiece, including legacy core preferences."""
+    value = str(load_api_keys().get("hud_style", "dna")).strip().lower()
+    if value == "core":
+        return "dna"
+    return value if value in HUD_STYLES else "dna"
 
 
 def save_hud_style(style: str) -> None:
     s = str(style or "").strip().lower()
-    _save_flag("hud_style", s if s in HUD_STYLES else "core")
+    if s == "core":
+        s = "dna"
+    _save_flag("hud_style", s if s in HUD_STYLES else "dna")
 
 
 FILE_ACCESS_SCOPES = ("home", "all_local_drives")
 
 
 def get_file_access_scope() -> str:
-    """Return the configured file-tool scope, defaulting to the user profile."""
-    scope = str(load_api_keys().get("file_access_scope", "home")).strip().lower()
-    return scope if scope in FILE_ACCESS_SCOPES else "home"
+    """Return the configured file-tool scope, defaulting to local drives."""
+    scope = str(
+        load_api_keys().get("file_access_scope", "all_local_drives")
+    ).strip().lower()
+    return scope if scope in FILE_ACCESS_SCOPES else "all_local_drives"
 
 
 def save_file_access_scope(scope: str) -> None:
@@ -164,6 +170,21 @@ def save_file_access_scope(scope: str) -> None:
     value = str(scope or "").strip().lower()
     _save_flag("file_access_scope",
                value if value in FILE_ACCESS_SCOPES else "home")
+
+
+PERMISSION_MODES = ("normal", "trusted", "unlimited", "restricted")
+
+
+def get_permission_mode() -> str:
+    """Return the configured permission profile, defaulting safely to Normal."""
+    mode = str(load_api_keys().get("permission_mode", "normal")).strip().lower()
+    return mode if mode in PERMISSION_MODES else "normal"
+
+
+def save_permission_mode(mode: str) -> None:
+    """Persist a supported permission profile without changing other settings."""
+    value = str(mode or "").strip().lower()
+    _save_flag("permission_mode", value if value in PERMISSION_MODES else "normal")
 
 
 # ── Live-session tuning ──────────────────────────────────────────────────────
@@ -319,6 +340,17 @@ def _patch_config(**fields) -> None:
             data = {}
     data.update(fields)
     CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+
+
+def get_or_create_license_device_id() -> str:
+    """Return the stable random device ID used for license binding."""
+    device_id = load_api_keys().get("license_device_id", "")
+    try:
+        return str(uuid.UUID(device_id))
+    except (ValueError, TypeError, AttributeError):
+        device_id = str(uuid.uuid4())
+        _patch_config(license_device_id=device_id)
+        return device_id
 
 
 def get_input_device() -> str:

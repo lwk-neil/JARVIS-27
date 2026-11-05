@@ -25,7 +25,7 @@ def _configure_pyautogui(module) -> None:
 pyautogui = LazyModule("pyautogui", _configure_pyautogui)
 pyperclip = LazyModule("pyperclip")
 
-from core import confirm, outcome
+from core import outcome
 from core.undo import push_undo
 
 _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
@@ -729,38 +729,6 @@ ACTION_MAP: dict[str, callable] = {
     "shutdown":            shutdown_computer,
 }
 
-# ── What needs a human, and what just needs an undo ──────────────────────────
-#
-# The old gate was `_DANGEROUS_ACTIONS = {"restart", "shutdown"}` checked against
-# a `confirmed` parameter the MODEL filled in — so the model confirmed its own
-# shutdowns, and everything else (switching off the WiFi this assistant is
-# talking over) had no gate at all.
-#
-# Two lists now, and the split is about reversibility, not about how alarming
-# the word sounds:
-#
-#   _IRREVERSIBLE — a human presses a button on the HUD. Nothing else.
-#   everything else — done immediately, with an undo pushed if it can be undone.
-#
-# Asking before every action is what makes an assistant unusable, and every
-# question costs a round trip. Undo is both faster and safer than a prompt.
-_IRREVERSIBLE = {
-    "restart":     ("Restart this computer",
-                    "Anything unsaved will be lost. The computer restarts in 10 seconds."),
-    "shutdown":    ("Shut this computer down",
-                    "Anything unsaved will be lost. The computer powers off in 10 seconds."),
-    # Not obviously destructive, and that is exactly why it was missed: turning
-    # the WiFi off cuts the assistant's own connection to the Live API, so it
-    # cannot be asked to turn it back on.
-    "toggle_wifi": ("Switch WiFi off or on",
-                    "If this switches WiFi off, JARVIS loses its connection and "
-                    "cannot switch it back on by voice."),
-}
-
-# Kept so anything still importing the old name keeps working.
-_DANGEROUS_ACTIONS = set(_IRREVERSIBLE)
-
-
 # ── Local intent resolution ──────────────────────────────────────────────────
 #
 # This used to be an entire extra Gemini call, made INSIDE the tool: the Live
@@ -894,29 +862,6 @@ def computer_settings(
     print(f"[Settings] Action: {action}  Value: {value}  OS: {_OS}")
     if player:
         print(f"[Settings] {action}")            # terminal, not the HUD
-
-    # ── The gate ─────────────────────────────────────────────────────────────
-    # A human presses a button, or this does not happen. The model can no longer
-    # write its own permission slip, and the action itself is handed to the UI
-    # rather than performed here — so returning early is not "declining", it is
-    # "parked until someone says yes".
-    if action in _IRREVERSIBLE:
-        title, detail = _IRREVERSIBLE[action]
-        func = ACTION_MAP.get(action)
-        if func is None:
-            return outcome.failed("computer_settings",
-                                  "that is not an action this tool has",
-                                  wanted=raw_action)
-        if confirm.pending_title():
-            return outcome.ask(
-                "computer_settings",
-                "there is already a confirmation waiting on screen - the user "
-                "has to answer that one first",
-                wanted=action)
-        return confirm.request(
-            key=action, title=title, detail=detail,
-            run=lambda f=func, a=action: (f(), f"{a} done.")[1],
-        )
 
     if action == "volume_set":
         try:
@@ -1055,7 +1000,7 @@ def computer_settings(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "computer_settings",
-    "description": "Controls the computer: volume, brightness, display settings (including resolution and monitor layout through the OS controls), window management, keyboard shortcuts, typing text on screen, closing apps, fullscreen, dark mode, WiFi, restart, shutdown, scrolling, tab management, zoom, screenshots, lock screen, refresh/reload page. Use for ANY single computer control command. restart, shutdown and toggle_wifi put a confirmation on the user's screen and do NOT happen until they press it — never claim they are done. Volume, brightness and dark mode can be reversed with the `undo` tool.",
+    "description": "Controls the computer: volume, brightness, display settings (including resolution and monitor layout through the OS controls), window management, keyboard shortcuts, typing text on screen, closing apps, fullscreen, dark mode, WiFi, restart, shutdown, scrolling, tab management, zoom, screenshots, lock screen, refresh/reload page. Use for ANY single computer control command. Carry out the action the user requests without asking for confirmation. Volume, brightness and dark mode can be reversed with the `undo` tool.",
     # Used in place of `description` only when a small model is on a tool
     # budget - Gemini still gets the full text. See providers/schema.py.
     "brief": (

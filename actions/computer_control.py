@@ -1,6 +1,7 @@
 #computer_control.py
 import io
 import json
+import os
 import platform
 import re
 import string
@@ -162,6 +163,29 @@ def _random_data(data_type: str) -> str:
 
     return f"random_{data_type}_{random.randint(1000, 9999)}"
 
+
+_PASTE_SETTLE_SECONDS = 0.35
+
+
+def _paste_via_clipboard(text: str, restore_clipboard: bool) -> None:
+    """Paste text and avoid overwriting a clipboard change made by another app."""
+    original = pyperclip.paste() if restore_clipboard else None
+    try:
+        pyperclip.copy(text)
+        time.sleep(0.1)
+        paste_key = "command" if _get_os() == "mac" else "ctrl"
+        pyautogui.hotkey(paste_key, "v")
+        time.sleep(_PASTE_SETTLE_SECONDS)
+    finally:
+        if restore_clipboard and pyperclip.paste() == text:
+            pyperclip.copy(original)
+
+
+def _type_via_clipboard(text: str) -> None:
+    """Paste text without leaving it behind in the user's clipboard."""
+    _paste_via_clipboard(text, restore_clipboard=True)
+
+
 def _user_profile() -> dict:
     """Read identity fields from long-term memory."""
     try:
@@ -176,8 +200,19 @@ def _user_profile() -> dict:
 def _type(text: str, interval: float = 0.03) -> str:
     _require_pyautogui()
     time.sleep(0.3)
+    if _require_pyperclip():
+        _type_via_clipboard(text)
+        return outcome.unverified(
+            "type",
+            "text was pasted into the focused control but its contents were not read back",
+            method="clipboard",
+        )
     pyautogui.typewrite(text, interval=interval)
-    return f"Typed: {text[:60]}{'…' if len(text) > 60 else ''}"
+    return outcome.unverified(
+        "type",
+        "keystrokes were sent to the focused control but its contents were not read back",
+        method="key events",
+    )
 
 
 def _smart_type(text: str, clear_first: bool = True) -> str:
@@ -186,15 +221,20 @@ def _smart_type(text: str, clear_first: bool = True) -> str:
         _clear_field()
         time.sleep(0.1)
 
-    if len(text) > 20 and _require_pyperclip():
-        pyperclip.copy(text)
-        time.sleep(0.1)
-        paste_key = "command" if _get_os() == "mac" else "ctrl"
-        pyautogui.hotkey(paste_key, "v")
-        return f"Smart-typed (clipboard): {text[:60]}{'…' if len(text) > 60 else ''}"
+    if _require_pyperclip():
+        _type_via_clipboard(text)
+        return outcome.unverified(
+            "smart_type",
+            "text was pasted after clearing the focused control, but its contents were not read back",
+            method="clipboard",
+        )
 
     pyautogui.typewrite(text, interval=0.04)
-    return f"Smart-typed: {text[:60]}{'…' if len(text) > 60 else ''}"
+    return outcome.unverified(
+        "smart_type",
+        "keystrokes were sent after clearing the focused control, but its contents were not read back",
+        method="key events",
+    )
 
 
 def _click(x=None, y=None, button: str = "left", clicks: int = 1) -> str:
@@ -249,12 +289,13 @@ def _clipboard_get() -> str:
 
 def _clipboard_paste(text: str) -> str:
     if _require_pyperclip():
-        pyperclip.copy(text)
-        time.sleep(0.1)
         _require_pyautogui()
-        paste_key = "command" if _get_os() == "mac" else "ctrl"
-        pyautogui.hotkey(paste_key, "v")
-        return f"Pasted: {text[:60]}{'…' if len(text) > 60 else ''}"
+        _paste_via_clipboard(text, restore_clipboard=False)
+        return outcome.unverified(
+            "paste",
+            "the paste shortcut was sent but the target content was not read back",
+            method="clipboard",
+        )
     return "pyperclip not available"
 
 
@@ -279,11 +320,18 @@ def _focus_window(title: str) -> str:
 
     if os_name == "windows":
         try:
-            script = f'(New-Object -ComObject WScript.Shell).AppActivate("{title}")'
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True, timeout=5, **_WIN_HIDE,
+            script = (
+                "$shell = New-Object -ComObject WScript.Shell; "
+                "if (-not $shell.AppActivate($env:SYKE_WINDOW_TITLE)) { exit 1 }"
             )
+            env = os.environ.copy()
+            env["SYKE_WINDOW_TITLE"] = title
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True, timeout=5, env=env, **_WIN_HIDE,
+            )
+            if result.returncode != 0:
+                return f"Could not focus window: {title}"
             time.sleep(0.3)
             return f"Focused window: {title}"
         except Exception as e:
@@ -291,14 +339,20 @@ def _focus_window(title: str) -> str:
 
     if os_name == "mac":
         script = (
-            f'tell application "System Events" to '
-            f'set frontmost of (first process whose name contains "{title}") to true'
+            "on run argv\n"
+            "tell application \"System Events\"\n"
+            "set targetProcess to first process whose name contains (item 1 of argv)\n"
+            "set frontmost of targetProcess to true\n"
+            "end tell\n"
+            "end run"
         )
         try:
-            subprocess.run(
-                ["osascript", "-e", script],
+            result = subprocess.run(
+                ["osascript", "-e", script, title],
                 capture_output=True, timeout=5,
             )
+            if result.returncode != 0:
+                return f"Could not focus window: {title}"
             time.sleep(0.3)
             return f"Focused window: {title}"
         except Exception as e:
@@ -315,21 +369,25 @@ def _focus_window(title: str) -> str:
                 return f"Focused window: {title}"
         except FileNotFoundError:
             pass
+        except Exception as e:
+            return f"focus_window (Linux) failed: {e}"
         try:
             result = subprocess.run(
                 ["xdotool", "search", "--name", title, "windowactivate"],
                 capture_output=True, timeout=5,
             )
-            time.sleep(0.3)
-            return f"Focused window: {title}"
+            if result.returncode == 0:
+                time.sleep(0.3)
+                return f"Focused window: {title}"
         except FileNotFoundError:
             return "focus_window (Linux) requires wmctrl or xdotool"
         except Exception as e:
             return f"focus_window (Linux) failed: {e}"
+        return f"Could not focus window: {title}"
 
     return f"focus_window: unknown OS '{os_name}'"
 
-def _close_app(app_name: str, confirmed_index: int | None = None) -> str:
+def _close_app(app_name: str) -> str:
     """Close the application the user named — that one, and never this one.
 
     THE BUG THIS REPLACES
@@ -411,7 +469,7 @@ def _close_app(app_name: str, confirmed_index: int | None = None) -> str:
     # coin toss. Only when they tie: "discord" beating "discordcanary" on an
     # exact match is a clear winner and interrupting the user to confirm it
     # would be the assistant refusing to do an unambiguous thing.
-    if len(ranked) > 1 and not confirmed_index:
+    if len(ranked) > 1:
         best_score = group[0].score
         tied = [name for name, ms in ranked if ms[0].score == best_score]
         if len(tied) > 1:
@@ -561,7 +619,7 @@ def computer_control(
         # core/outcome.is_problem().
         print(f"[ComputerControl] {action}")
 
-    print(f"[ComputerControl] ▶ {action}  {params}")
+    print(f"[ComputerControl] ▶ {action}")
 
     try:
 
@@ -641,10 +699,7 @@ def computer_control(
             return _focus_window(params.get("title", ""))
 
         if action in ("close_app", "close_application", "quit_app"):
-            return _close_app(
-                params.get("app_name") or params.get("text") or "",
-                confirmed_index=params.get("confirmed"),
-            )
+            return _close_app(params.get("app_name") or params.get("text") or "")
 
         if action == "random_data":
             dt     = params.get("type", "name")
@@ -679,6 +734,8 @@ TOOL = {
         "Always name the application in 'app_name'; there is no action that "
         "closes 'whatever is in front', because that is usually the assistant. "
         "To OPEN an application use the open_app tool instead. "
+        "Text entry and paste results are unverified until the user checks the "
+        "target field; never claim the text was received based only on the hotkey. "
         "Read the status the tool returns: 'done' means it was confirmed, "
         "'unverified' means it was requested and could NOT be confirmed - say "
         "so rather than claiming success - and 'ask' means nothing was done "
@@ -702,14 +759,6 @@ TOOL = {
                     "For close_app: the application to close, named as the "
                     "user said it. Any application running on the machine "
                     "works - there is no fixed list. Never leave this empty."
-                )
-            },
-            "confirmed": {
-                "type": "BOOLEAN",
-                "description": (
-                    "For close_app: set true only after the tool asked which "
-                    "application was meant AND the user answered. Pass their "
-                    "answer in 'app_name'."
                 )
             },
             "text": {

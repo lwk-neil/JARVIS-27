@@ -13,20 +13,17 @@ WHAT IT ACCEPTS
     a YouTube search    "play the new Dune trailer"
 
     The first two are handed straight to Qt. The last two have to be resolved
-    to something playable first, which is what yt-dlp does; without it, this
-    says so and offers to open the video in the browser instead of failing.
+    to something playable first, which is what yt-dlp does; if it cannot be
+    resolved, this reports the failure and never launches another app.
 
 SOUND IS OFF UNTIL ASKED FOR
-    A soundtrack talking over the assistant is the one way this feature could
-    make JARVIS worse rather than better, and the microphone is open while it
-    plays. So it starts muted, and the user turns sound on — from the button in
-    the video header, or by saying so. Closing it works both ways too.
+    Videos start muted; explicit music/audio requests start with sound on.
+    The user can change sound from the mini-player or by asking.
 """
 from __future__ import annotations
 
 import re
 import threading
-import webbrowser
 from pathlib import Path
 
 _YT = re.compile(r"(youtube\.com/|youtu\.be/)", re.I)
@@ -162,11 +159,6 @@ def _resolve_youtube(url_or_query: str) -> tuple[str, str, str, str]:
     return video["url"], (audio or {}).get("url", ""), info.get("title") or "", ""
 
 
-def _search_page(query: str) -> str:
-    from urllib.parse import quote_plus
-    return f"https://www.youtube.com/results?search_query={quote_plus(query)}"
-
-
 def video_player(parameters: dict = None, response=None, player=None,
                  session_memory=None) -> str:
     params = parameters or {}
@@ -201,13 +193,15 @@ def video_player(parameters: dict = None, response=None, player=None,
 
     local = _local_path(source)
     if local:
-        player.show_video(local, Path(local).name, muted=True)
-        return f"Playing {Path(local).name} on the display, muted."
+        muted = params.get("sound") is not True
+        player.show_video(local, Path(local).name, muted=muted)
+        return f"Playing {Path(local).name} in the mini-player."
 
     # A direct media URL can go straight to the player; a YouTube page cannot.
     if _is_url(source) and not _YT.search(source):
-        player.show_video(source, source.rsplit("/", 1)[-1][:44], muted=True)
-        return "Playing that on the display, muted."
+        muted = params.get("sound") is not True
+        player.show_video(source, source.rsplit("/", 1)[-1][:44], muted=muted)
+        return "Playing that in the mini-player."
 
     # ANSWER FIRST, OPEN SECOND.
     #
@@ -220,14 +214,16 @@ def video_player(parameters: dict = None, response=None, player=None,
     # So the seconds stay, and what changes is where the user spends them:
     # listening to JARVIS say it is coming, instead of watching nothing happen.
     # The same shape whatsapp_call uses, and for the same reason.
-    threading.Thread(target=_play_youtube, args=(player, source, _begin_open()),
+    muted = params.get("sound") is not True
+    threading.Thread(target=_play_youtube,
+                     args=(player, source, _begin_open(), muted),
                      daemon=True, name="video-open").start()
     # Deliberately a status line rather than a finished English sentence: the
     # model writes the words, in the user's own language.
     return f"status=opening source={source}"
 
 
-def _play_youtube(player, source: str, token: int) -> None:
+def _play_youtube(player, source: str, token: int, muted: bool = True) -> None:
     """The part that takes seconds. Speaks only if something goes wrong —
     silence means the video is on screen, which the user can see for
     themselves."""
@@ -242,25 +238,14 @@ def _play_youtube(player, source: str, token: int) -> None:
 
     if url:
         try:
-            player.show_video(url, title or source, muted=True,
+            player.show_video(url, title or source, muted=muted,
                               audio_source=audio_url)
             return
         except Exception as e:                              # noqa: BLE001
             err = str(e)
 
-    # Resolution failed. Opening it in a browser is worse than playing it in the
-    # HUD, but it is a great deal better than doing nothing, and the reason is
-    # reported rather than swallowed.
-    page = source if _YT.search(source) else _search_page(source)
-    opened = ""
-    try:
-        webbrowser.open(page)
-        opened = " and it has been opened in the browser instead"
-    except Exception:
-        pass
     _say(player, "Tell the user, in one short sentence in their own language: "
-                 f"'{source}' could not be played on the display "
-                 f"({err}){opened}.")
+                 f"'{source}' could not be played in the mini-player ({err}).")
 
 
 def _say(player, instruction: str) -> None:
@@ -284,14 +269,13 @@ TOOL = {
         "video on the screen', 'stop the video', 'videoyu kapat', 'turn the "
         "sound on', 'sesi aç', 'mute it'. Accepts a local file path, a direct "
         "video URL, a YouTube link, or a description to search YouTube for. "
-        "Video always starts MUTED — only call action='unmute' when the user "
-        "actually asks to hear it. "
+        "Video starts MUTED unless the user asks for music or sound; set "
+        "sound=true in that case. "
         "This returns the moment it is asked, before the picture appears: when "
         "it answers 'status=opening', say in one short sentence that you are "
         "putting it on the display, and do not wait or call it again. "
-        "Do NOT use 'youtube_video' for this: that optional plugin opens videos "
-        "in the web browser and summarises transcripts, it never plays anything "
-        "on the assistant's display."
+        "Playback stays in a small always-on-top SYKE mini-player and never "
+        "opens a browser or another media app."
     ),
     # Used in place of `description` only when a small model is on a tool
     # budget - Gemini still gets the full text. See providers/schema.py.
@@ -313,6 +297,13 @@ TOOL = {
                     "For action='play': a local file path, a direct video URL, "
                     "a YouTube link, or what to search YouTube for. Pass what "
                     "the user actually named, in their own words."
+                ),
+            },
+            "sound": {
+                "type": "BOOLEAN",
+                "description": (
+                    "Set true when the user asks for music or explicitly wants "
+                    "audio immediately; otherwise leave false."
                 ),
             },
         },

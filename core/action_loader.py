@@ -159,7 +159,13 @@ class ActionRegistry:
         if rec is None or not rec.valid:
             return f"Action '{name}' is not available."
         try:
-            return _call_handler(rec.handler, parameters, ctx or {}) or "Done."
+            result = _call_handler(rec.handler, parameters, ctx or {})
+            if result is None or result is False or result == "":
+                return (
+                    "Tool returned no result. The action may not have completed; "
+                    "verify before reporting success."
+                )
+            return str(result)
         except Exception as e:
             self._logger(f"Action '{name}' crashed during run(): {e}")
             traceback.print_exc()

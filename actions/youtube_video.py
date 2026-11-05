@@ -4,10 +4,8 @@ import re
 import sys
 import time
 import subprocess
-import shutil
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import quote_plus
 
 try:
     import pyautogui
@@ -33,7 +31,7 @@ try:
 except ImportError:
     _TRANSCRIPT_OK = False
 
-from config import get_os, is_windows, is_mac, is_linux
+from config import is_windows, is_mac
 
 
 def _get_base_dir() -> Path:
@@ -54,56 +52,10 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-_YT_VIDEO_FILTER = "EgIQAQ%3D%3D"
-
-
 def _get_api_key() -> str:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)["gemini_api_key"]
 
-
-def _open_url(url: str) -> None:
-    try:
-        if is_mac():
-            subprocess.Popen(["open", url])
-        elif is_linux():
-            subprocess.Popen(["xdg-open", url])
-        else:
-            subprocess.Popen(["cmd", "/c", "start", "", url], shell=False)
-    except Exception as e:
-        print(f"[YouTube] ⚠️ open_url failed: {e}")
-
-def _scrape_first_video_url(query: str) -> str | None:
-
-    if not _REQUESTS_OK:
-        return None
-
-    search_url = (
-        f"https://www.youtube.com/results"
-        f"?search_query={quote_plus(query)}"
-        f"&sp={_YT_VIDEO_FILTER}"
-    )
-
-    try:
-        r    = requests.get(search_url, headers=HEADERS, timeout=10)
-        html = r.text
-
-        video_ids = re.findall(r'"videoId":"([A-Za-z0-9_-]{11})"', html)
-
-        seen = set()
-        for vid in video_ids:
-            if vid in seen:
-                continue
-            seen.add(vid)
-
-            if f'/shorts/{vid}' in html:
-                continue
-            return f"https://www.youtube.com/watch?v={vid}"
-
-    except Exception as e:
-        print(f"[YouTube] ⚠️ scrape_first_video_url failed: {e}")
-
-    return None
 
 def _extract_video_id(url: str) -> str | None:
     match = re.search(
@@ -285,27 +237,16 @@ def _handle_play(parameters: dict, player) -> str:
     query = parameters.get("query", "").strip()
     if not query:
         return "Please tell me what you'd like to watch, sir."
+    from actions.video_player import video_player
 
-    if player:
-        player.write_log(f"[YouTube] Searching: {query}")
-
-    print(f"[YouTube] 🔍 Scraping first non-Shorts video for: {query}")
-
-    video_url = _scrape_first_video_url(query)
-
-    if video_url:
-        print(f"[YouTube] ▶️ Opening: {video_url}")
-        _open_url(video_url)
-        return f"Playing: {query}"
-
-    print(f"[YouTube] ⚠️ Scrape failed, opening filtered search page")
-    fallback_url = (
-        f"https://www.youtube.com/results"
-        f"?search_query={quote_plus(query)}"
-        f"&sp={_YT_VIDEO_FILTER}"
+    return video_player(
+        {
+            "action": "play",
+            "source": query,
+            "sound": parameters.get("sound") is True,
+        },
+        player=player,
     )
-    _open_url(fallback_url)
-    return f"Opened YouTube search for: {query} (manual selection required)"
 
 
 def _handle_summarize(parameters: dict, player, speak) -> str:
@@ -423,7 +364,7 @@ def youtube_video(
 
     if player:
         player.write_log(f"[YouTube] Action: {action}")
-    print(f"[YouTube] ▶️  Action: {action}  Params: {params}")
+    print(f"[YouTube] ▶️  Action: {action}")
 
     handler = _ACTION_MAP.get(action)
     if handler is None:
@@ -434,8 +375,15 @@ def youtube_video(
 
     try:
         if action == "play":
-            return handler(params, player) or "Done."
-        return handler(params, player, speak) or "Done."
+            result = handler(params, player)
+        else:
+            result = handler(params, player, speak)
+        if result is None or result is False or result == "":
+            return (
+                "Tool returned no result. The action may not have completed; "
+                "verify before reporting success."
+            )
+        return str(result)
     except Exception as e:
         print(f"[YouTube] ❌ Error in {action}: {e}")
         return f"YouTube {action} failed, sir: {e}"
@@ -444,7 +392,10 @@ def youtube_video(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "youtube_video",
-    "description": "Controls YouTube. Use for: playing videos, summarizing a video's content, getting video info, or showing trending videos.",
+    "description": (
+        "Plays YouTube videos or music inside SYKE's floating mini-player without "
+        "opening a browser. Also summarizes videos, gets video info, or shows trending."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -455,6 +406,13 @@ TOOL = {
             "query": {
                 "type": "STRING",
                 "description": "Search query for play action"
+            },
+            "sound": {
+                "type": "BOOLEAN",
+                "description": (
+                    "Set true for music or when the user explicitly asks for "
+                    "audio during playback."
+                )
             },
             "save": {
                 "type": "BOOLEAN",

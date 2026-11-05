@@ -35,7 +35,7 @@ a matching process appeared.
 
 Everything the assistant already does carries over untouched. A local engine
 inherits the avatar, the lip-sync, the self-echo guard, push-to-talk, the wake
-word, memory, undo, the confirmation gate and every action and plugin — because
+word, memory, undo and every action and plugin — because
 it enters through the same door the Live session always did.
 
 Syke also changes what the assistant is allowed to CLAIM. Every tool that
@@ -55,7 +55,7 @@ It's not just an assistant — it's an extension of your digital life.
 | Feature | Description |
 |---|---|
 | 🫧 Transparent Controls | Buttons use transparent backgrounds with subtle hover/pressed highlights, while keeping their borders and labels visible |
-| 🧑‍🎤 Holographic Avatar | A large, smoothly drifting sphere of uniformly sized dots, with gentle traveling surface waves and a shaded gradient that follows the active color protocol, plus rounded HUD lettering — software rendered, no GPU or extra packages |
+| 🧑‍🎤 Holographic Avatar | A large, smoothly drifting sphere of uniformly sized dots, with gentle traveling surface waves and a monochrome shaded gradient, plus rounded HUD lettering — software rendered, no GPU or extra packages |
 | 👄 Real Lip-Sync | ~50 mouth shapes a second from the audio's formants **and** the transcript — closures, spreads and rounds, not a volume meter |
 | 🌍 Language-Free Mouth | Articulation is derived by Unicode reduction, so Latin, Cyrillic and Greek scripts all work from one rule set — and scripts that hide pronunciation fall back cleanly |
 | 🙂 Facial Acting | Brows track the phrase, gaze saccades between fixations, natural blinking, a small nod on stressed syllables |
@@ -67,14 +67,16 @@ It's not just an assistant — it's an extension of your digital life.
 | ⚡ Instant Acknowledgment | Speaks a short, context-aware reply in **your language** the instant a longer task starts — no more silent waiting |
 | 🚀 Faster Live Engine | Runs on **Gemini 3.1 Flash Live** — roughly 2× faster time-to-first-word than the previous model |
 | 🧩 Self-Describing Skills | Every bundled skill declares its own `TOOL` dict + handler and is auto-discovered at launch — adding one is a single file |
-| 🧠 Recallable Memory | No size limit and nothing silently forgotten — the prompt carries what fits, the rest is looked up on demand from a local search |
+| 🧠 Recallable Memory | Persistent personal facts and searchable session summaries stay local; when the 2 MB safety limit is reached, new writes fail visibly instead of evicting old memories |
+| ⏰ Reminder Briefing | Upcoming reminders created in SYKE are saved locally and included in the startup briefing; expired reminders are omitted |
 | 👁️ Memory Panel | See every fact JARVIS has stored about you, when it learned it, and delete any of it in one click |
 | ↩️ Undo | Take back what the assistant did — files it moved, renamed, created or wrote, and settings it changed |
 | ⚠️ Real Confirmation | Shutdown, restart and WiFi wait for a button **you** press — the model cannot confirm its own irreversible actions |
+| 🔑 SYKE License | Redeems a one-time license, binds it to a random device ID, and checks current server status at each launch; the key is kept in the OS credential store |
 | 🎧 Audio Device Picker | Choose the microphone and speakers by name, filtered to the short list your OS shows — and measured, so every entry actually works |
 | 🔗 Session Continuity | A dropped connection, a voice change or a device change no longer wipes the conversation |
 | 🧩 Plugin System | Drop a single `.py` file into `plugins/` — JARVIS learns a new skill on next launch |
-| 📺 Video on the HUD | Plays YouTube, a local file or any video URL **where the avatar sits** — starts muted, sound on request |
+| 📺 Floating Media Player | Plays YouTube, local files, and media URLs in a small always-on-top SYKE window; music can start with sound, and playback never launches a browser |
 | 🪜 Model Ladder | Nine Gemini models in one measured order — a quota, a timeout or an outage steps to the next rung instead of failing |
 | 🔌 Choose Your Engine | Gemini Live, or your own STT + LLM + TTS — picked in the UI, no file editing |
 | 🏠 Local & Third-Party Models | Ollama · LM Studio · llama.cpp · vLLM · OpenAI · Groq · DeepSeek · Mistral · xAI · OpenRouter — one setting, because they share a protocol |
@@ -84,30 +86,33 @@ It's not just an assistant — it's an extension of your digital life.
 | 🎙️ ElevenLabs Voice | One voice that speaks every language, streamed |
 | 🧮 Tool Budget | A small model is given the tools that matter instead of all 45 — core-first, by count and by size |
 | 🎙️ Real-time Voice | Ultra-low latency conversation in any language via Gemini Live API |
-| 🎨 Live Theming | Say “red protocol” (or another color) to change the HUD accent live; “black and white protocol” restores monochrome without restarting |
-| 💬 Conversation Island | A small, non-activating floating pill shows your latest request and JARVIS's reply over other apps, and hides while the JARVIS window is active |
-| ✨ Cinematic Transitions | The HUD fades in at launch; voice color protocols apply live without restarting |
-| 〰️ Reactive HUD | Waveform pulses to real audio — your mic while listening, JARVIS while speaking |
+| ◼ Black-and-White UI | A consistent monochrome interface with clear contrast across the HUD and settings |
+| ✨ Cinematic Transitions | The HUD fades in at launch and the window fades out when closed |
+| 〰️ Reactive HUD | Waveform pulses to real audio; the HUD flashes red and logs a status while processing |
+| ✨ Centerpiece Styles | Cycle among 12 displays: DNA Reactor, Pulse Wave, Matrix Globe, Prism Core, Atom Reactor, Solar Flare, Vortex Core, Quantum Field, Singularity, Halo Reactor, Lattice Core, and animated face |
+| 🎨 Custom Accent | Pick a bright app-wide hue or black-and-gray monochrome swatch; the theme updates live and persists across restarts |
 | 🎙️ Voice Picker | Choose from 5 native Gemini voices and switch live from the UI — no restart |
 | ♾️ Unlimited Sessions | Sliding-window context compression — one conversation can last for hours |
 | 🖥️ System Control | Launch apps, adjust volume/brightness, open OS display controls for resolution and monitor layout, WiFi, shortcuts, power — all by voice |
-| 📁 File Access Scope | Choose user-folder access or authorize file tools for all local fixed/removable drives; Windows permissions still apply |
+| 📁 File Access Scope | File tools default to all local fixed/removable drives; restrict them to your user folder in settings. Windows permissions and administrator approval still apply |
+| 🔐 Permission Modes | Normal, Trusted Automation, and Unlimited carry out requested actions without a separate confirmation; Restricted blocks mutations and sensitive capture |
 | 🧩 Autonomous Tasks | High-level planning for complex multi-step goals via agent mode |
-| 👁️ Visual Awareness | Screen capture and webcam vision piped into your main Gemini session, labelled by source |
+| 👁️ Visual Awareness | Screen capture and webcam vision are available on explicit request, shown in the UI, and labelled by source |
 | 🧠 Persistent Memory | Deeply remembers projects, preferences, and personal context across sessions |
 | ⌨️ Hybrid Input | Seamlessly switch between keyboard typing and voice commands |
 | 🌅 Morning Briefing | On first boot: greets you, reads the time, recaps yesterday, and fetches live news |
 | 🔔 Proactive 2.0 | Time-aware, context-aware check-ins — knows the time of day, your projects, and what you've been discussing |
 | 🗓️ Session Memory | Summarises each conversation and mentions it naturally next morning — consumed after use, never repeats |
 | 👁️‍🗨️ Background Monitoring | User-configured topic watching — checks for new headlines once a day and alerts naturally |
-| 📊 Hardware Monitoring | Continuous CPU, RAM, GPU and temperature telemetry with localized voice alerts |
+| 📊 Hardware Monitoring | Continuous CPU, RAM, GPU and temperature telemetry with localized voice alerts, plus an on-demand diagnostics dashboard |
 | 🌤️ Weather Report | Live weather data for your city, personalized from memory |
 | 🗺️ Dynamic Content Panel | Scrollable display layer beneath the HUD that renders web results, news, and search data |
 | 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` / `search` — Gemini Grounded first, DDG fallback |
 | ⏰ Smart Reminders | OS-native scheduled notifications (Windows Task Scheduler / macOS LaunchAgent / Linux systemd) |
 | 📂 File Processor | Read, summarize, and answer questions about local files |
-| 🌐 Browser Control | Open URLs, navigate tabs, and interact with the browser by voice |
+| 🌐 Browser Control | Interact with websites in a paired Chrome/Edge tab or a Syke-managed browser window when explicitly requested |
 | 📨 Send Message | Compose and send messages through WhatsApp, Telegram, and more |
+| 🧾 Preference Controls | Review, update, and remove Syke's saved preferences by voice when requested |
 | 🖱️ Desktop Control | Taskbar, window management, and desktop-level operations |
 | 🧑‍💻 Silent Language Memory | Detects spoken language on first use — all future sessions adapt automatically |
 | 📱 Remote Dashboard | Control the assistant from your phone via QR code pairing |
@@ -120,7 +125,66 @@ It's not just an assistant — it's an extension of your digital life.
 | 🐧 Platform Honesty | On Wayland, or a macOS without permissions, it says what this session will not let it do instead of narrating a click that never happened |
 | 🎚️ Per-Device Volume | The output slider belongs to the speaker you picked, not to whatever the system calls default |
 | 🎤 Prove It Hears You | A TEST button with a live meter — the one check an automated probe on silence can never make |
-| 🪪 Assistant Customization | Change the assistant name, your name, voice, and colour from the UI — takes effect immediately |
+| 🪪 Assistant Customization | Change the assistant name, your name, and voice from the UI — takes effect immediately |
+
+### Use a currently open website
+
+Syke can work on the active tab in Chrome or Edge through the optional
+`browser_extension` folder. In the browser, open `chrome://extensions` or
+`edge://extensions`, enable **Developer mode**, choose **Load unpacked**, and
+select that folder. Start Syke, open the extension popup on the website you
+want to use, enter the pairing token from
+`%LOCALAPPDATA%\Syke\browser_bridge.token` (Windows) or
+`~/.local/share/Syke/browser_bridge.token` (macOS/Linux), then select
+**Connect this tab**. The extension requests access only to the tab you
+explicitly connect; crossing to another site disconnects it automatically. Use
+**Disconnect** in the popup to stop sharing the paired tab. The popup shows
+the current connection and queued/running browser actions. Say “use the current
+tab” to direct Syke to it; ask for browser status or cancellation of queued
+browser actions when needed. Actions already executing in the page cannot be
+safely interrupted.
+
+Page text is treated as untrusted data, not as instructions from the user.
+Syke carries out browser actions without a separate confirmation when you
+explicitly request them. The extension is limited to the paired HTTP/HTTPS tab.
+If it is not paired, the existing Syke-managed browser controls remain
+available.
+
+### Review activity and recover from failures
+
+Ask Syke to show recent action history. It records action names, outcome
+categories, and durations locally, but does not store action arguments,
+message contents, or page text. Ask it to clear the history to erase the
+record. When an action is reported as failed
+or unverified, the history includes a short, context-specific check to make
+before retrying, helping avoid duplicate messages or repeated changes.
+
+### Manage saved preferences
+
+Ask Syke to list, look up, change, or remove a saved preference (for example,
+your preferred response style). These preference controls use the existing
+local memory store, which remains editable in the Memory panel.
+
+### Pasting, screen visibility, and conversation continuity
+
+For a standard desktop chat window, focus the chat box before asking Syke to
+type or paste. When the box is hard to target, ask it to focus the app and find
+the composer on screen first. Clipboard pastes now wait for the target app to
+process the paste and preserve the previous clipboard unless another app has
+changed it meanwhile. A paste is still reported as **unverified** until the
+target field is visually checked; do not press Enter just to test it.
+
+Screen analysis now captures all displays by default (`monitor=0`). Use
+`monitor=1`, `monitor=2`, etc. to inspect a single display at greater detail.
+The image is sent at up to 1920×1080; for tiny text, select the display with
+the relevant window and ask a focused question.
+
+Long conversations now save a task-oriented checkpoint about every 24 logged
+messages, as well as at session end. Checkpoints retain the goal, progress,
+decisions, blockers, and next step, and are included in reconnect/startup
+context. If checkpoint generation fails, the in-memory transcript is retained
+for a later attempt. Saved checkpoints omit secrets and private message
+contents; use Syke's memory tools for specific facts that must persist.
 
 ---
 
@@ -260,7 +324,7 @@ It is **not faster.** Gemini Live answers in roughly 0.3–0.6s because there is
 
 It also gives up barge-in, server-side turn detection, proactive audio and session resumption.
 
-It keeps tools, memory, the avatar, lip-sync, undo and the confirmation gate. And it keeps working when the quota is gone, the connection is down, or the microphone is not allowed to leave the building. That is the trade, stated plainly so nobody chooses it expecting the other thing.
+It keeps tools, memory, the avatar, lip-sync and undo. And it keeps working when the quota is gone, the connection is down, or the microphone is not allowed to leave the building. That is the trade, stated plainly so nobody chooses it expecting the other thing.
 
 ### 🤝 It stopped saying it had done things it had not done
 
@@ -524,7 +588,7 @@ This is not only tidiness. Every bundled skill is declared to the model on **eve
 * **Every launch paid 201 ms for a plugin nobody had asked to use.** Discovery executes every file in `plugins/`, and `youtube_video` imported `requests` and `youtube_transcript_api` at module scope. Deferring one of them would have saved nothing — the transcript library imports `requests` itself. Both are now checked with `find_spec`, which answers "is it installed?" without executing anything, and loaded on first use: **plugin discovery 211 ms → 39 ms**.
 * A plugin that needed a file from a **newer Mark** was rejected with *"pip install core"*. The loader could not tell this project's own packages from a third-party one, so it told people to install a same-named stranger from an index — wrong, and a supply-chain hazard dressed up as a fix. First-party names now say the app is behind the plugin and that there is nothing to install.
 
-> Built on the Mark LI–LV foundation: the **🧑‍🎤 Holographic Avatar**, **👄 Lip-Sync**, **🎚️ Push-to-Talk**, **🔇 Self-Echo Guard**, **🧩 Plugin System**, **♾️ Unlimited Sessions**, **🎨 Live Theming** and **🎙️ Wake Word** are all still here.
+> Built on the Mark LI–LV foundation: the **🧑‍🎤 Holographic Avatar**, **👄 Lip-Sync**, **🎚️ Push-to-Talk**, **🔇 Self-Echo Guard**, **🧩 Plugin System**, **♾️ Unlimited Sessions**, the **◼ monochrome UI** and **🎙️ Wake Word** are all still here.
 
 ---
 
@@ -569,20 +633,13 @@ Three things it deliberately does *not* do:
 
 **Undo costs nothing at runtime.** It appends a closure to a list; nothing in it runs unless you ask.
 
-### ⚠️ A confirmation the model can't forge
+### Actions run on request
 
-The old gate read like this:
-
-```python
-if action in _DANGEROUS_ACTIONS:            # {"restart", "shutdown"}
-    confirmed = str(params.get("confirmed", "")).lower()
-```
-
-`confirmed` is a **tool parameter, which means the model fills it in.** Nothing stopped it sending `confirmed=yes` on the first call and nothing checked that a human was ever involved. It was a convention, not a gate. And its coverage was two actions — so `toggle_wifi`, which cuts the assistant's own connection to the Live API and therefore *cannot be asked to undo itself*, went through with no gate at all.
-
-The token is now issued by the interface. Shutdown, restart and WiFi put a banner on the HUD and **return immediately**; the action runs only if you press CONFIRM. Nothing blocks — JARVIS keeps talking while the banner is up — so this is **cheaper than the old gate**, which burned two tool round trips on every power command.
-
-> The split between the two mechanisms is about reversibility, not about how alarming a word sounds. Anything undoable is done at once; only the genuinely irreversible asks. An assistant that checks with you before turning the volume down is one you stop talking to.
+Normal, Trusted Automation, and Unlimited mode execute requested actions
+without a separate confirmation prompt, including browser interactions,
+external messages, file changes, code execution, restart, and shutdown.
+Restricted mode remains read-only. Web pages and other external content remain
+untrusted data: their embedded instructions are not treated as user requests.
 
 ### 🎧 It finally asks which microphone
 
@@ -632,7 +689,7 @@ It is held in memory only, deliberately: writing it to disk would make a fresh l
 | **XLIX** | Auto-start · clipboard intelligence · assistant customization |
 | **L** | Session memory · background monitoring · proactive 2.0 · instant vision |
 | **LI** | Plugin system · affective dialog · proactive audio · unlimited sessions |
-| **LII** | Voice picker · live theming · reactive HUD · recallable memory · undo · real confirmation · audio device picker · session continuity |
+| **LII** | Voice picker · monochrome HUD · reactive HUD · recallable memory · undo · real confirmation · audio device picker · session continuity |
 | **LIII** | Wake word · Gemini 3.1 Flash Live · instant acknowledgment · self-describing action/plugin architecture |
 | **LIV** | Holographic avatar · viseme lip-sync · facial acting · face-as-status · push-to-talk · self-echo guard · runtime self-knowledge & limits |
 | **Earlier releases** | Video on the HUD · model ladder with measured fallback · split settings drawers · trimmed bundled skill list |
@@ -658,10 +715,12 @@ Run these commands from the Syke project folder.
 ### Windows app (.exe)
 
 To build a standalone, windowed executable on Windows, run `build_windows.bat`
-from the project folder. It creates `dist\JARVIS.exe`; the first launch asks
-for your Gemini API key. Keep the generated `config` folder beside the EXE so
-your key and settings persist. The build deliberately does not bundle the
-repository's local API key or other personal configuration.
+from the project folder. It creates `dist\SYKE.exe` and
+`dist\SYKE-Windows.zip`; the ZIP contains the compiled executable, not loose
+Python source files. First launch asks for a SYKE license key, then asks for
+your Gemini API key if that engine is selected. License activation and startup
+validation require an internet connection. The build deliberately does not
+bundle credentials or personal configuration.
 
 The executable is built with PyInstaller and includes the app icon, avatar
 model, prompt, bundled actions/plugins, and dashboard assets. It is a
@@ -681,9 +740,10 @@ connection; the script installs the build dependencies automatically.
 | **Python** | 3.11, 3.12 or 3.13 |
 | **Microphone** | Required for voice interaction (and for the "Hey Jarvis" wake word) |
 | **Speakers** | Required for voice replies |
-| **API Key** | Free Gemini API key (entered on first launch → `config/api_keys.json`). Only for the Gemini engine — a fully local setup needs no key and no account |
+| **SYKE license** | Required to launch; redeem once, then the server validates the device-bound license at each startup |
+| **AI API Key** | Free Gemini API key (entered on first launch → `config/api_keys.json`). Only needed for Gemini; a fully local AI setup needs no AI-provider key |
 | **GPU** | **Not required, anywhere.** The avatar and HUD video are rendered in software; local speech recognition and the neural voice both run on the CPU by default |
-| **YouTube on the HUD** | `yt-dlp`, installed by `setup.py`. Without it, local files and direct URLs still play and YouTube links open in the browser with an explanation |
+| **YouTube in the mini-player** | `yt-dlp`, installed by `setup.py`. Without it, local files and direct URLs still play; YouTube playback reports that the resolver is unavailable and does not open a browser |
 | **Wake word** *(optional)* | One-click download from ⚙ → WAKE WORD (`openwakeword`, a few MB, fully local) |
 | **A different engine** *(optional)* | Nothing extra. ⚙ → ENGINE & PROVIDERS talks to any local or hosted model over HTTP using a library the app already has |
 | **Local speech recognition** *(optional)* | `faster-whisper`, installed from the same panel. **CPU is the default** — a GPU is an option, never a requirement |
@@ -764,11 +824,11 @@ Syke/
 │   ├── file_processor.py     # Document reading and summarization
 │   ├── send_message.py       # Messaging integration
 │   ├── weather_report.py     # Live weather data
-│   ├── video_player.py       # Plays video on the HUD, where the avatar normally is
+│   ├── video_player.py       # Plays media in the floating, always-on-top mini-player
 │   └── desktop.py            # Desktop and taskbar control
 ├── memory/
 │   ├── memory_manager.py     # Load/save long_term.json — sessions, monitors, identity
-│   ├── config_manager.py     # api_keys.json access — key, OS, name, voice, colour, toggles
+│   ├── config_manager.py     # api_keys.json access — key, OS, name, voice, toggles
 │   └── long_term.json        # Persistent store — created on first run
 ├── dashboard/                # Phone control — paired by QR code, one-time key
 │   ├── server.py             # FastAPI + uvicorn; HTTP by default, HTTPS opt-in
@@ -797,7 +857,7 @@ Syke/
 │   ├── action_loader.py      # Bundled-action engine — the built-in twin of plugin_loader
 │   └── wake_word.py          # Local "Hey Jarvis" detector — own thread, offline, opt-in
 └── config/
-    ├── api_keys.json         # API key, name, voice, colour, toggles — created on first launch (git-ignored)
+    ├── api_keys.json         # API key, name, voice, toggles — created on first launch (git-ignored)
     └── certs/                # Self-signed TLS pair for the phone dashboard — generated locally (git-ignored)
 ```
 
@@ -813,19 +873,29 @@ Syke/
 
 ## 🔒 Your Data
 
-Everything stays on your machine. There is no MARK server, no telemetry and no account.
+Your voice is streamed to Google's Gemini Live API while a session is open;
+that is the one thing that leaves your computer, and it stops when you mute or
+close the app.
+
+**Syke changes what that sentence can say about you.** Choose a local engine —
+Whisper on your CPU, a model served by Ollama or LM Studio, your system's own
+voice — and nothing leaves the machine at all: no audio, no transcript, no
+key, no account. Choose a hosted provider instead and your audio and text go
+to that vendor rather than to Google. The panel says which is which, and the
+assistant never quietly switches between them.
 
 | What | Where | Notes |
 |---|---|---|
+| SYKE license key | OS credential store | Stored through the system keyring; sent only over HTTPS to the SYKE redemption/validation endpoints. A random device ID is stored in `config/api_keys.json` for device binding. |
 | Gemini API key, plugin and provider credentials | `config/api_keys.json` | **Plaintext.** Anyone with your user account can read it. Treat it like a password file. |
 | Dashboard TLS certificate + private key | `config/certs/` | Generated locally, self-signed, never leaves the machine. |
 | What the assistant remembers about you | `memory/long_term.json` | Delete the file to make it forget everything. |
 
-All three are listed in `.gitignore`, so a fork or a pull request cannot leak them by accident. **If you have already committed `config/api_keys.json` anywhere public, revoke that key** at [aistudio.google.com](https://aistudio.google.com/app/apikey) and generate a new one — removing the file in a later commit does not remove it from the history.
+These local credentials and settings are listed in `.gitignore`, so a fork or a pull request cannot leak them by accident. **If you have already committed `config/api_keys.json` anywhere public, revoke that key** at [aistudio.google.com](https://aistudio.google.com/app/apikey) and generate a new one — removing the file in a later commit does not remove it from the history.
 
-Your voice is streamed to Google's Gemini Live API while a session is open; that is the one thing that leaves your computer, and it stops when you mute or close the app.
+When using Gemini, your voice is streamed to Google's Gemini Live API while a session is open; that stops when you mute or close the app.
 
-**Syke changes what that sentence can say about you.** Choose a local engine — Whisper on your CPU, a model served by Ollama or LM Studio, your system's own voice — and nothing leaves the machine at all: no audio, no transcript, no key, no account. Choose a hosted provider instead and your audio and text go to that vendor rather than to Google. The panel says which is which, and the assistant never quietly switches between them.
+**Your AI engine still determines where assistant content goes.** Choose a local engine — Whisper on your CPU, a model served by Ollama or LM Studio, your system's own voice — and audio and transcripts can remain local to that AI workflow. Choose a hosted provider instead and relevant audio or text goes to that vendor. The panel says which is which, and the assistant never quietly switches between them.
 
 ---
 

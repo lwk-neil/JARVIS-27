@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Syke Current Tab</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 14px; width: 290px; }
+    label { display: block; margin: 10px 0 4px; }
+    input { box-sizing: border-box; padding: 7px; width: 100%; }
+    button { margin-top: 12px; padding: 8px; width: 100%; }
+    #status { color: #444; min-height: 2.5em; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <strong>Syke Current Tab</strong>
+  <label for="token">Pairing token</label>
+  <input id="token" type="password" autocomplete="off" placeholder="From the local token file">
+  <button id="connect">Connect this tab</button>
+  <button id="disconnect">Disconnect</button>
+  <button id="refresh">Refresh connection status</button>
+  <p id="status">Only this tab is shared. Reconnect after navigating to another site.</p>
+  <script src="popup.js"></script>
+</body>
+</html>

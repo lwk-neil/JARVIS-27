@@ -39,7 +39,7 @@ THE DIRECTION OF THE CONTRACT — THIS IS THE IMPORTANT PART
 
     The payoff is not small. An engine that emits Live-shaped events inherits
     the avatar, the lip-sync, the self-echo guard, push-to-talk, the wake word,
-    undo, the confirmation gate, memory, and every action and plugin — without
+    undo, memory, and every action and plugin — without
     one line of any of them changing.
 
 WHAT main.py ACTUALLY TOUCHES

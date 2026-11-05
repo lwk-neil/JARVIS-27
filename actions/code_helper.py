@@ -5,7 +5,6 @@ import re
 import time
 from pathlib import Path
 
-
 def get_base_dir():
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -93,7 +92,8 @@ def _preview(code: str, lines: int = 10) -> str:
 
 def _has_error(output: str) -> bool:
     error_signals = ["error", "exception", "traceback", "syntaxerror",
-                     "nameerror", "typeerror", "stderr", "failed", "crash"]
+                     "nameerror", "typeerror", "stderr", "failed", "crash",
+                     "exit code"]
     return any(s in output.lower() for s in error_signals)
 
 
@@ -232,6 +232,8 @@ def _run_file(path: Path, args: list, timeout: int) -> str:
         output = result.stdout.strip()
         error  = result.stderr.strip()
         parts  = []
+        if result.returncode != 0:
+            parts.append(f"Process failed (exit code {result.returncode}).")
         if output: parts.append(f"Output:\n{output}")
         if error:  parts.append(f"Stderr:\n{error}")
         return "\n\n".join(parts) if parts else "Executed with no output."
@@ -550,7 +552,14 @@ def code_helper(
     file_path   = p.get("file_path", "").strip()
     code        = p.get("code", "").strip()
     args        = p.get("args", [])
-    timeout     = int(p.get("timeout", 30))
+    if not isinstance(args, list) or any(not isinstance(arg, str) for arg in args):
+        return "CLI arguments must be provided as a list of strings."
+    try:
+        timeout = int(p.get("timeout", 30))
+    except (TypeError, ValueError):
+        return "Execution timeout must be a whole number of seconds."
+    if not 1 <= timeout <= 300:
+        return "Execution timeout must be between 1 and 300 seconds."
 
     if action == "auto":
         action = _detect_intent(description, file_path, code)
@@ -570,9 +579,13 @@ def code_helper(
         return _explain_action(file_path, code, player)
 
     elif action == "run":
+        if not file_path:
+            return "Please provide a file path to run, sir."
         return _run_action(file_path, args, timeout, player)
 
     elif action == "build":
+        if not description:
+            return "Please describe what you want me to build, sir."
         return _build(description, language, output_path, args, timeout, speak, player)
 
     elif action == "optimize":
@@ -617,7 +630,8 @@ TOOL = {
                 "description": "Raw code string for explain"
             },
             "args": {
-                "type": "STRING",
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
                 "description": "CLI arguments for run/build"
             },
             "timeout": {

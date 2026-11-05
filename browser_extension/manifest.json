@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Syke Current Tab",
+  "version": "1.0.0",
+  "description": "Explicitly pair the active browser tab with Syke for user-requested tasks.",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1:18765/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Connect this tab to Syke"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

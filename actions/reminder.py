@@ -4,8 +4,12 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
+
+_REMINDER_INDEX_LOCK = threading.RLock()
+_REMINDER_INDEX_FILENAME = "scheduled_reminders.json"
 
 _CNW: dict = (
     {"creationflags": subprocess.CREATE_NO_WINDOW}
@@ -31,6 +35,66 @@ def _scripts_dir() -> Path:
     d = Path.home() / ".jarvis" / "reminders"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _reminder_index_path() -> Path:
+    return _scripts_dir() / _REMINDER_INDEX_FILENAME
+
+
+def _read_reminder_index() -> list[dict]:
+    path = _reminder_index_path()
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Reminder index is not valid JSON: {path}") from error
+
+    if not isinstance(entries, list):
+        raise ValueError(f"Reminder index must contain a list: {path}")
+
+    validated = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"Invalid reminder entry in {path}")
+        date_time = entry.get("datetime")
+        message = entry.get("message")
+        if not isinstance(date_time, str) or not isinstance(message, str):
+            raise ValueError(f"Invalid reminder entry in {path}")
+        try:
+            target_dt = datetime.fromisoformat(date_time)
+        except ValueError as error:
+            raise ValueError(f"Invalid reminder date in {path}") from error
+        validated.append({
+            "datetime": target_dt.isoformat(timespec="seconds"),
+            "message": message,
+        })
+    return validated
+
+
+def _save_reminder_index(entries: list[dict]) -> None:
+    path = _reminder_index_path()
+    temporary_path = path.with_suffix(".tmp")
+    try:
+        temporary_path.write_text(
+            json.dumps(entries, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def list_upcoming_reminders(now: datetime | None = None) -> list[dict]:
+    """Return saved reminders whose scheduled local time has not passed."""
+    current_time = now or datetime.now()
+    with _REMINDER_INDEX_LOCK:
+        entries = _read_reminder_index()
+    upcoming = [
+        entry for entry in entries
+        if datetime.fromisoformat(entry["datetime"]) > current_time
+    ]
+    return sorted(upcoming, key=lambda entry: entry["datetime"])
 
 
 def _sanitise(text: str, max_len: int = 200) -> str:
@@ -329,6 +393,19 @@ def reminder(
 
     if not job_id:
         return "I couldn't register the reminder with the system scheduler."
+
+    try:
+        with _REMINDER_INDEX_LOCK:
+            entries = _read_reminder_index()
+            entries.append({
+                "datetime": target_dt.isoformat(timespec="seconds"),
+                "message": safe_msg,
+            })
+            _save_reminder_index(entries)
+    except (OSError, ValueError) as e:
+        return (
+            f"Reminder scheduled, but I couldn't save it for startup briefings: {e}"
+        )
 
     if player:
         player.write_log(f"[Reminder] ✅ {date_str} {time_str} — {safe_msg[:40]}")

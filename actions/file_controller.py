@@ -255,17 +255,12 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
         target = (base / name) if name else base
         if not _is_safe_path(target):
             return f"Access denied: {target}"
+        if target.exists():
+            return f"Not created: '{target.name}' already exists; the existing file was left unchanged."
         target.parent.mkdir(parents=True, exist_ok=True)
-        existed = target.exists()
-        previous = None
-        if existed:
-            try:
-                previous = target.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                previous = None
-        target.write_text(content, encoding="utf-8")
-        push_undo(f"created {target.name}",
-                  _undo_write(target, previous) if existed else _undo_create(target))
+        with target.open("x", encoding="utf-8") as file:
+            file.write(content)
+        push_undo(f"created {target.name}", _undo_create(target))
         return f"File created: {target.name}"
     except Exception as e:
         return f"Could not create file: {e}"
@@ -338,6 +333,8 @@ def move_file(path: str, name: str = "", destination: str = "") -> str:
         if dst.is_dir():
             dst = dst / src.name
 
+        if dst.exists():
+            return f"Not moved: destination '{dst.name}' already exists; neither file was changed."
         dst.parent.mkdir(parents=True, exist_ok=True)
         origin = src.resolve()
         shutil.move(str(src), str(dst))
@@ -367,6 +364,8 @@ def copy_file(path: str, name: str = "", destination: str = "") -> str:
         if dst.is_dir():
             dst = dst / src.name
 
+        if dst.exists():
+            return f"Not copied: destination '{dst.name}' already exists; neither file was changed."
         dst.parent.mkdir(parents=True, exist_ok=True)
 
         if src.is_dir():

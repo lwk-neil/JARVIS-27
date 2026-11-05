@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime
-from threading import Lock
+from threading import RLock
 from pathlib import Path
 import sys
 
@@ -14,7 +14,7 @@ def get_base_dir() -> Path:
 
 BASE_DIR         = get_base_dir()
 MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
-_lock            = Lock()
+_lock            = RLock()
 MAX_VALUE_LENGTH = 380
 
 # ── Why there are two very different numbers here ────────────────────────────
@@ -37,8 +37,8 @@ MAX_VALUE_LENGTH = 380
 #
 # Everything above the core stays on disk and is fetched on demand by the
 # recall_memory tool — see search_memory() and format_memory_for_prompt().
-MEMORY_MAX_CHARS  = 200_000
-PROMPT_CORE_CHARS = 900
+MEMORY_MAX_CHARS  = 2_000_000
+PROMPT_CORE_CHARS = 1_300
 PROMPT_INDEX_CHARS = 420
 # Most entries any one category may contribute to the core block, so a person
 # with forty stored preferences still gets their sister into the prompt.
@@ -71,15 +71,7 @@ def load_memory() -> dict:
             print(f"[Memory] ⚠️ Load error: {e}")
             return _empty_memory()
 
-def _all_entries(memory: dict) -> list[tuple]:
-    entries = []
-    for cat, items in memory.items():
-        if not isinstance(items, dict):
-            continue
-        for key, entry in items.items():
-            if isinstance(entry, dict) and "value" in entry:
-                entries.append((cat, key, entry))
-    return entries
+
 
 
 # Set by main.py so a trim can reach the activity log. Deleting something a
@@ -96,35 +88,34 @@ def set_trim_notifier(fn) -> None:
 def _trim_to_limit(memory: dict) -> dict:
     if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
         return memory
-    entries = _all_entries(memory)
-    entries.sort(key=lambda t: t[2].get("updated", "0000-00-00"))
-    dropped = []
-    for cat, key, _ in entries:
-        if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
-            break
-        del memory[cat][key]
-        dropped.append(f"{cat}/{key}")
-        print(f"[Memory] 🗑️  Trimmed {cat}/{key}")
-    if dropped and _trim_notifier:
+    if _trim_notifier:
         try:
             _trim_notifier(
-                f"SYS: Memory full — forgot {len(dropped)} oldest entries "
-                f"({', '.join(dropped[:3])}{'…' if len(dropped) > 3 else ''})"
+                "ERR: Memory store reached its size limit. Existing memories "
+                "were preserved; this change was not saved."
             )
         except Exception:
             pass
-    return memory
+    raise MemoryError(
+        "Memory store reached its size limit; existing memories were preserved."
+    )
+
+
+def _write_memory(memory: dict) -> None:
+    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = MEMORY_PATH.with_name(MEMORY_PATH.name + ".tmp")
+    temporary.write_text(
+        json.dumps(memory, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temporary.replace(MEMORY_PATH)
 
 def save_memory(memory: dict) -> None:
     if not isinstance(memory, dict):
         return
-    memory = _trim_to_limit(memory)
-    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with _lock:
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        memory = _trim_to_limit(memory)
+        _write_memory(memory)
 
 
 def _truncate_value(val: str) -> str:
@@ -159,11 +150,12 @@ def _recursive_update(target: dict, updates: dict) -> bool:
 def update_memory(memory_update: dict) -> dict:
     if not isinstance(memory_update, dict) or not memory_update:
         return load_memory()
-    memory = load_memory()
-    if _recursive_update(memory, memory_update):
-        save_memory(memory)
-        print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
-    return memory
+    with _lock:
+        memory = load_memory()
+        if _recursive_update(memory, memory_update):
+            save_memory(memory)
+            print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
+        return memory
 
 def _entry_value(entry) -> str:
     """Accept both the {'value': ..., 'updated': ...} shape and a bare string,
@@ -252,6 +244,16 @@ def format_memory_for_prompt(memory: dict | None) -> str:
     rest.sort(key=lambda t: t[0], reverse=True)
 
     used    = sum(len(l) + 1 for l in core_lines)
+    sessions = memory.get("sessions", [])
+    if isinstance(sessions, list) and sessions:
+        latest = sessions[-1]
+        if isinstance(latest, dict):
+            summary = str(latest.get("summary", "")).strip()
+            if summary:
+                session_line = f"Most recent conversation checkpoint: {summary[:600]}"
+                if used + len(session_line) + 1 <= PROMPT_CORE_CHARS:
+                    core_lines.extend(("", session_line))
+                    used += len(session_line) + 1
     shown: dict[str, list[str]] = {}
     overflow: dict[str, list[str]] = {}
 
@@ -288,6 +290,8 @@ def format_memory_for_prompt(memory: dict | None) -> str:
                     continue
                 indexed.append(overflow[cat][i])
                 cursor[cat] = i + 1
+    if isinstance(sessions, list) and len(sessions) > 1:
+        indexed.append(f"{len(sessions)} saved conversation summaries")
 
     for cat, label in _CATEGORY_LABELS.items():
         if shown.get(cat):
@@ -357,8 +361,20 @@ def search_memory(query: str, limit: int = 8) -> str:
 
     rows: list[tuple[int, str, str, str]] = []
     for cat, items in memory.items():
+        if cat == "sessions" and isinstance(items, list):
+            for index, entry in enumerate(items):
+                if not isinstance(entry, dict):
+                    continue
+                val = str(entry.get("summary", "")).strip()
+                if not val:
+                    continue
+                key = str(entry.get("date") or f"session {index + 1}")
+                s = _score(words, cat, key, val) if words else 1
+                if s > 0:
+                    rows.append((s, cat, key, val))
+            continue
         if not isinstance(items, dict):
-            continue                     # skip 'sessions', which is a list
+            continue
         for key, entry in items.items():
             val = _entry_value(entry)
             if not val:
@@ -425,55 +441,59 @@ forget_memory = forget
 
 # ── Session memory ─────────────────────────────────────────────────────────────
 
-_SESSION_MAX = 3   # safety cap — in practice 0-1 entries after pop
-
-
 def save_session_summary(summary: str, language: str = "") -> None:
-    """Append a 1-2 sentence session summary to long_term.json['sessions']."""
+    """Append a compact resumable conversation checkpoint."""
     summary = (summary or "").strip()
     if not summary:
         return
-    memory   = load_memory()
-    sessions = memory.get("sessions", [])
-    if not isinstance(sessions, list):
-        sessions = []
-    entry: dict = {
-        "date":    datetime.now().strftime("%Y-%m-%d"),
-        "summary": summary[:280],
-    }
-    if language:
-        entry["language"] = language
-    sessions.append(entry)
-    memory["sessions"] = sessions[-_SESSION_MAX:]
     with _lock:
-        MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        memory = load_memory()
+        sessions = memory.get("sessions", [])
+        if not isinstance(sessions, list):
+            sessions = []
+        entry: dict = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "summary": summary[:600],
+            "briefed": False,
+        }
+        if language:
+            entry["language"] = language
+        sessions.append(entry)
+        memory["sessions"] = sessions
+        save_memory(memory)
+    print(f"[Memory] Session saved ({entry['date']}): {summary[:60]}...")
+
+
+def latest_unbriefed_session() -> dict | None:
+    """Return the newest session summary not yet included in a startup briefing."""
+    with _lock:
+        sessions = load_memory().get("sessions", [])
+        if not isinstance(sessions, list):
+            return None
+        return next(
+            (dict(entry) for entry in reversed(sessions)
+             if isinstance(entry, dict) and not entry.get("briefed", False)),
+            None,
         )
-    print(f"[Memory] 📝 Session saved ({entry['date']}): {summary[:60]}…")
 
 
-def pop_last_session() -> dict | None:
-    """
-    Return AND remove the most recent session entry.
-    Calling this consumes the entry so it is never repeated in future briefings.
-    """
+def mark_session_briefed(entry: dict) -> None:
+    """Mark a summary as announced without deleting its recallable history."""
+    date = str(entry.get("date", ""))
+    summary = str(entry.get("summary", ""))
+    if not date or not summary:
+        return
     with _lock:
-        if not MEMORY_PATH.exists():
-            return None
-        try:
-            memory   = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
-            sessions = memory.get("sessions", [])
-            if not isinstance(sessions, list) or not sessions:
-                return None
-            entry = sessions.pop()          # remove the last entry
-            memory["sessions"] = sessions
-            MEMORY_PATH.write_text(
-                json.dumps(memory, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            return entry
-        except Exception as e:
-            print(f"[Memory] ⚠️ pop_last_session error: {e}")
-            return None
+        memory = load_memory()
+        sessions = memory.get("sessions", [])
+        if not isinstance(sessions, list):
+            return
+        for index in range(len(sessions) - 1, -1, -1):
+            saved = sessions[index]
+            if (isinstance(saved, dict) and saved.get("date") == date
+                    and saved.get("summary") == summary):
+                for older in sessions[:index + 1]:
+                    if isinstance(older, dict):
+                        older["briefed"] = True
+                save_memory(memory)
+                return

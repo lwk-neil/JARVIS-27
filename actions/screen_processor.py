@@ -69,9 +69,9 @@ def _get_os() -> str:
     return _load_config().get("os_system", "windows").lower()
 
 
-_IMG_MAX_W = 1280
-_IMG_MAX_H = 720
-_JPEG_Q    = 82
+_IMG_MAX_W = 1920
+_IMG_MAX_H = 1080
+_JPEG_Q    = 88
 
 
 def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]:
@@ -89,14 +89,24 @@ def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]
         return img_bytes, f"image/{source_format.lower()}"
 
 
-def _capture_screen() -> tuple[bytes, str]:
+def _capture_screen(monitor_index: int = 0) -> tuple[bytes, str]:
 
     if not _MSS:
         raise RuntimeError("mss is not installed. Run: pip install mss")
 
+    try:
+        monitor_index = int(monitor_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Monitor must be 0 (all displays) or a valid display number.") from exc
+
     with mss.mss() as sct:
         monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
-        target   = monitors[1] if len(monitors) > 1 else monitors[0]
+        if not 0 <= monitor_index < len(monitors):
+            raise ValueError(
+                f"Display {monitor_index} is unavailable. Choose 0 (all displays) "
+                f"or a display from 1 to {len(monitors) - 1}."
+            )
+        target = monitors[monitor_index]
         shot     = sct.grab(target)
         png      = mss.tools.to_png(shot.rgb, shot.size)
 

@@ -17,14 +17,23 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Building JARVIS.exe...
-%PYTHON% -m PyInstaller --clean --noconfirm JARVIS.spec
+echo Building SYKE.exe...
+%PYTHON% -m PyInstaller --clean --noconfirm SYKE.spec
 if errorlevel 1 (
     echo PyInstaller build failed.
     exit /b 1
 )
 
+echo Packaging the compiled app without loose source files...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -LiteralPath '%~dp0dist\SYKE.exe' -DestinationPath '%~dp0dist\SYKE-Windows.zip' -Force"
+if errorlevel 1 (
+    echo ZIP packaging failed.
+    exit /b 1
+)
+
 echo.
-echo Build complete: %~dp0dist\JARVIS.exe
-echo First launch will ask for your Gemini API key.
+echo Build complete:
+echo   Executable: %~dp0dist\SYKE.exe
+echo   Download:   %~dp0dist\SYKE-Windows.zip
+echo First launch will ask for your SYKE license, then your Gemini API key if needed.
 endlocal

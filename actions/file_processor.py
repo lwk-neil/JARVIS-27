@@ -82,8 +82,13 @@ def _file_size_str(path: Path) -> str:
 
 def _output_path(src: Path, suffix: str, new_ext: str = None) -> Path:
     ext  = new_ext or src.suffix
-    name = f"{src.stem}_{suffix}{ext}"
-    return src.parent / name
+    stem = f"{src.stem}_{suffix}"
+    target = src.parent / f"{stem}{ext}"
+    index = 2
+    while target.exists():
+        target = src.parent / f"{stem}_{index}{ext}"
+        index += 1
+    return target
 
 def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
     try:

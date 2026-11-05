@@ -20,8 +20,8 @@ THE DESIGN HERE
       1. An action calls `request(...)` with a callable that does the real work.
       2. This module hands the UI a banner with CONFIRM / CANCEL and returns
          IMMEDIATELY with a sentence for the model to say out loud.
-      3. If — and only if — the user presses CONFIRM, the UI calls `resolve()`,
-         which runs the stored callable off the Qt thread.
+      3. If — and only if — the user presses CONFIRM or speaks a short explicit
+         approval, `resolve()` runs the stored callable off the Qt thread.
 
     Nothing blocks. The model keeps talking while the banner is up, so this
     costs no latency at all; in fact it is cheaper than the old gate, which
@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import threading
 import time
+import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -63,6 +64,15 @@ _lock = threading.Lock()
 _show_cb: Optional[Callable[[str, str], None]] = None
 _hide_cb: Optional[Callable[[], None]] = None
 _log_cb:  Optional[Callable[[str], None]] = None
+
+_VOICE_ACCEPT = {
+    "yes", "yep", "yeah", "confirm", "confirmed", "approve", "approved",
+    "proceed", "do it", "si", "sí", "oui", "ja", "evet", "はい", "да",
+}
+_VOICE_REJECT = {
+    "no", "nope", "cancel", "stop", "deny", "decline", "non", "nein",
+    "hayir", "hayır", "いいえ", "нет",
+}
 
 
 def bind(show, hide, log=None) -> None:
@@ -93,9 +103,15 @@ def request(key: str, title: str, detail: str, run: Callable[[], str]) -> str:
         return (f"I cannot confirm '{title}' right now because the interface is "
                 f"not available, so I have not done it.")
 
+    now = time.monotonic()
     with _lock:
+        if _pending is not None and now - _pending.at <= TIMEOUT_SECONDS:
+            return (
+                "[CONFIRMATION_PENDING] A confirmation is already waiting on "
+                "the user's decision. Do not claim this new action was queued."
+            )
         _pending = _Pending(key=key, title=title, detail=detail,
-                            run=run, at=time.monotonic())
+                            run=run, at=now)
 
     try:
         _show_cb(title, detail)
@@ -107,22 +123,12 @@ def request(key: str, title: str, detail: str, run: Callable[[], str]) -> str:
     _log(f"SYS: Awaiting confirmation — {title}")
     return (
         f"[CONFIRMATION_PENDING] I have put a confirmation on screen for: {title}. "
-        f"Say ONE short sentence in the user's own language telling them you need "
-        f"them to confirm it on the HUD before you do it. Do not claim it is done."
+        f"Tell the user they can say 'confirm' or 'cancel', or choose on the HUD. "
+        f"Do not claim it is done."
     )
 
 
-def resolve(accepted: bool) -> None:
-    """Called by the UI when the user presses CONFIRM or CANCEL.
-
-    Runs the stored callable on a worker thread — this is invoked from the Qt
-    thread, and shutting the machine down from inside a button handler would
-    freeze the interface on its way out."""
-    global _pending
-
-    with _lock:
-        p, _pending = _pending, None
-
+def _resolve_pending(p: Optional[_Pending], accepted: bool) -> None:
     if _hide_cb:
         try:
             _hide_cb()
@@ -142,13 +148,55 @@ def resolve(accepted: bool) -> None:
 
     def _worker():
         try:
-            result = p.run() or "Done."
+            result = p.run()
+            if result is None or result is False or result == "":
+                result = (
+                    "The confirmed action returned no result; its outcome "
+                    "could not be verified."
+                )
             _log(f"SYS: Confirmed — {p.title}. {result}")
         except Exception as e:
             _log(f"ERR: {p.title} failed — {e}")
 
     threading.Thread(target=_worker, daemon=True,
                      name=f"confirm-{p.key}").start()
+
+
+def resolve(accepted: bool) -> None:
+    """Resolve the current confirmation from the HUD buttons.
+
+    Runs the stored callable on a worker thread — this is invoked from the Qt
+    thread, and shutting the machine down from inside a button handler would
+    freeze the interface on its way out."""
+    global _pending
+
+    with _lock:
+        p, _pending = _pending, None
+
+    _resolve_pending(p, accepted)
+
+
+def resolve_voice(transcript: str) -> bool:
+    """Resolve a pending confirmation only for a short, explicit voice answer.
+
+    Returns True when a confirmation was consumed, so the caller can keep the
+    same spoken answer from triggering the action a second time through the LLM.
+    """
+    global _pending
+
+    phrase = re.sub(r"[^\w ]", "", str(transcript or "").casefold())
+    phrase = " ".join(phrase.split())
+    if phrase not in _VOICE_ACCEPT and phrase not in _VOICE_REJECT:
+        return False
+
+    with _lock:
+        p = _pending
+        if p is None:
+            return False
+        _pending = None
+
+    _resolve_pending(p, phrase in _VOICE_ACCEPT)
+    return True
 
 
 def pending_title() -> str:
